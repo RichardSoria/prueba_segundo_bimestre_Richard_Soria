@@ -1,34 +1,29 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:pdf/pdf.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import 'resenas_page.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class PublisherPublicationsPage extends StatefulWidget {
   const PublisherPublicationsPage({super.key});
 
   @override
-  State<PublisherPublicationsPage> createState() => _PublisherPublicationsPageState();
+  State<PublisherPublicationsPage> createState() =>
+      _PublisherPublicationsPageState();
 }
 
 class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
-  final TextEditingController nombreController = TextEditingController();
+  final TextEditingController tituloController = TextEditingController();
   final TextEditingController descripcionController = TextEditingController();
-  final TextEditingController latController = TextEditingController();
-  final TextEditingController lngController = TextEditingController();
-  final TextEditingController provinciaController = TextEditingController();
-  final TextEditingController ciudadController = TextEditingController();
 
   final List<Uint8List> fotosBytes = [];
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final picker = ImagePicker();
   final uuid = const Uuid();
-
-  final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
   Future<void> _pickImages(StateSetter setModalState) async {
     final picker = ImagePicker();
@@ -105,7 +100,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
   }
 
   Future<List<String>> _subirImagenesASupabase() async {
-    final storage = Supabase.instance.client.storage.from('turismo');
+    final storage = Supabase.instance.client.storage.from('imagenes');
     final List<String> urls = [];
 
     for (var i = 0; i < fotosBytes.length; i++) {
@@ -133,15 +128,8 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     return urls;
   }
 
-  Future<void> _guardarTurismo(BuildContext context) async {
-    final campos = [
-      nombreController.text,
-      descripcionController.text,
-      latController.text,
-      lngController.text,
-      provinciaController.text,
-      ciudadController.text,
-    ];
+  Future<void> _guardarTarea(BuildContext context) async {
+    final campos = [tituloController.text, descripcionController.text];
 
     final camposVacios = campos.any((campo) => campo.trim().isEmpty);
 
@@ -324,7 +312,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
       return;
     }
 
-    final confirmado = await _confirmarGuardarLugar();
+    final confirmado = await _confirmarGuardarTarea();
     if (!confirmado) return;
 
     showDialog(
@@ -338,34 +326,26 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     );
 
     try {
-      final lat = double.tryParse(latController.text) ?? 0.0;
-      final lng = double.tryParse(lngController.text) ?? 0.0;
-      final ubicacion = GeoPoint(lat, lng);
-
       final urls = await _subirImagenesASupabase();
 
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
       final data = await Supabase.instance.client
-          .from('users')
+          .from('usuarios')
           .select('name, lastName')
           .eq('id', user.id)
           .single();
 
       final String autorNombre = '${data['name']} ${data['lastName']}';
 
-      await FirebaseFirestore.instance.collection('turismo').add({
+      await FirebaseFirestore.instance.collection('tareas').add({
         'autor': autorNombre,
         'userID': user.id,
-        'nombre': nombreController.text,
+        'titulo': tituloController.text,
         'descripcion': descripcionController.text,
-        'latitud': lat,
-        'longitud': lng,
         'fotografias': urls,
-        'provincia': provinciaController.text,
-        'ciudad': ciudadController.text,
-        'ubicacion': ubicacion,
+        'estado': 'pendiente',
         'fecha': Timestamp.now(),
       });
 
@@ -377,7 +357,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lugar turístico guardado exitosamente.'),
+          content: Text('Tarea turístico guardado exitosamente.'),
           backgroundColor: Color(0xFF16243e), // Azul institucional
           behavior: SnackBarBehavior.floating,
         ),
@@ -401,16 +381,12 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
   }
 
   void _clearForm() {
-    nombreController.clear();
+    tituloController.clear();
     descripcionController.clear();
-    latController.clear();
-    lngController.clear();
-    provinciaController.clear();
-    ciudadController.clear();
     fotosBytes.clear();
   }
 
-  void _mostrarModalImagen(String url, String lugarId, bool esAutor) {
+  void _mostrarModalImagen(String url, String lugarId, bool esAutor) async {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -431,54 +407,61 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              !esAutor ?
-              Text("")
-              :
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _confirmarEliminarImagen(lugarId, url);
-                    },
-                    icon: const Icon(Icons.delete, color: Colors.white),
-                    label: const Text('Eliminar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE72F2B),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      textStyle: const TextStyle(fontWeight: FontWeight.bold),
+
+              !esAutor
+                  ? Text("")
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _confirmarEliminarImagen(lugarId, url);
+                          },
+                          icon: const Icon(Icons.delete, color: Colors.white),
+                          label: const Text('Eliminar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE72F2B),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await _actualizarImagen(lugarId, url);
+                          },
+                          icon: const Icon(
+                            Icons.image_search,
+                            color: Colors.white,
+                          ),
+                          label: const Text('Actualizar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF16243e),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await _actualizarImagen(lugarId, url);
-                    },
-                    icon: const Icon(Icons.image_search, color: Colors.white),
-                    label: const Text('Actualizar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16243e),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 12),
             ],
           ),
@@ -487,7 +470,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     );
   }
 
-  Future<bool> _confirmarGuardarLugar() async {
+  Future<bool> _confirmarGuardarTarea() async {
     return await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -552,14 +535,14 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
         false;
   }
 
-  void _confirmarEliminarLugar(String id) async {
+  void _confirmarEliminarTarea(String id) async {
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
-          '¿Estás seguro?',
+          '¿Estás seguro de eliminar la tarea?',
           style: TextStyle(
             color: Color(0xFFE72F2B), // Rojo de alerta
             fontWeight: FontWeight.bold,
@@ -601,20 +584,86 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
               ),
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sí, eliminar'),
+            child: const Text('Sí, eliminar tarea'),
           ),
         ],
       ),
     );
 
     if (confirmado == true) {
-      await FirebaseFirestore.instance.collection('turismo').doc(id).delete();
-    }
-
-    if (context.mounted) {
+      await FirebaseFirestore.instance.collection('tareas').doc(id).delete();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lugar eliminado exitosamente.'),
+          content: Text('Tarea eliminado exitosamente.'),
+          backgroundColor: Color(0xFF16243e), // Azul institucional
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _confirmarCompletarTarea(String id) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '¿Estás seguro de completar la tarea?',
+          style: TextStyle(
+            color: Color(0xFF1abc9c), // Rojo de alerta
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        content: const Text(
+          'Esta acción no se puede deshacer.',
+          style: TextStyle(fontSize: 16, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.grey.shade300,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: Color(0xFF1abc9c), // Rojo de alerta
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, completar tarea'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true) {
+      await FirebaseFirestore.instance.collection('tareas').doc(id).update({
+        'estado': 'Completada',
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tarea completada exitosamente.'),
           backgroundColor: Color(0xFF16243e), // Azul institucional
           behavior: SnackBarBehavior.floating,
         ),
@@ -691,7 +740,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
       try {
         final doc = FirebaseFirestore.instance
-            .collection('turismo')
+            .collection('tareas')
             .doc(lugarId);
         await doc.update({
           'fotografias': FieldValue.arrayRemove([url]),
@@ -733,7 +782,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     if (origen == null) return;
 
     final int cantidadDisponible = 6 - cantidadActual;
-    final storage = Supabase.instance.client.storage.from('turismo');
+    final storage = Supabase.instance.client.storage.from('imagenes');
     final nuevasUrls = <String>[];
 
     try {
@@ -833,7 +882,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
       if (nuevasUrls.isNotEmpty) {
         final doc = FirebaseFirestore.instance
-            .collection('turismo')
+            .collection('tareas')
             .doc(lugarId);
         await doc.update({'fotografias': FieldValue.arrayUnion(nuevasUrls)});
       }
@@ -883,7 +932,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
     try {
       final nuevoBytes = await pickedFile.readAsBytes();
-      final storage = Supabase.instance.client.storage.from('turismo');
+      final storage = Supabase.instance.client.storage.from('imagenes');
       final nuevoNombre = 'img_${uuid.v4()}.jpg';
 
       final nuevoPath = await storage.uploadBinary(
@@ -895,7 +944,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
       if (nuevoPath.isNotEmpty) {
         final nuevaUrl = storage.getPublicUrl(nuevoNombre);
         final doc = FirebaseFirestore.instance
-            .collection('turismo')
+            .collection('tareas')
             .doc(lugarId);
 
         // Reemplaza la imagen antigua por la nueva
@@ -918,13 +967,9 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     }
   }
 
-  void _editarLugar(String id, Map<String, dynamic> data) {
-    final nombreCtrl = TextEditingController(text: data['nombre']);
+  void _editarTarea(String id, Map<String, dynamic> data) {
+    final tituloCtrl = TextEditingController(text: data['titulo']);
     final descripcionCtrl = TextEditingController(text: data['descripcion']);
-    final latCtrl = TextEditingController(text: data['latitud'].toString());
-    final lngCtrl = TextEditingController(text: data['longitud'].toString());
-    final provinciaCtrl = TextEditingController(text: data['provincia']);
-    final ciudadCtrl = TextEditingController(text: data['ciudad']);
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -932,7 +977,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
-          'Editar Lugar',
+          'Editar Tarea',
           style: TextStyle(
             color: Color(0xFF16243e),
             fontWeight: FontWeight.bold,
@@ -946,17 +991,14 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _styledField(nombreCtrl, 'Nombre del Lugar'),
+                  _styledField(tituloCtrl, 'Nombre del Tarea'),
                   const SizedBox(height: 10),
-                  _styledField(descripcionCtrl, 'Descripción', maxLines: 2),
+                  _styledField(
+                    descripcionCtrl,
+                    'Descripción de la tarea',
+                    maxLines: 2,
+                  ),
                   const SizedBox(height: 10),
-                  _styledField(latCtrl, 'Latitud', isNumber: true),
-                  const SizedBox(height: 10),
-                  _styledField(lngCtrl, 'Longitud', isNumber: true),
-                  const SizedBox(height: 10),
-                  _styledField(provinciaCtrl, 'Provincia'),
-                  const SizedBox(height: 10),
-                  _styledField(ciudadCtrl, 'Ciudad'),
                 ],
               ),
             ),
@@ -988,14 +1030,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
               textStyle: const TextStyle(fontWeight: FontWeight.w600),
             ),
             onPressed: () async {
-              final campos = [
-                nombreCtrl.text,
-                descripcionCtrl.text,
-                latCtrl.text,
-                lngCtrl.text,
-                provinciaCtrl.text,
-                ciudadCtrl.text,
-              ];
+              final campos = [tituloCtrl.text, descripcionCtrl.text];
 
               final camposVacios = campos.any((campo) => campo.trim().isEmpty);
 
@@ -1093,15 +1128,11 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
               try {
                 await FirebaseFirestore.instance
-                    .collection('turismo')
+                    .collection('tareas')
                     .doc(id)
                     .update({
-                      'nombre': nombreCtrl.text,
+                      'titulo': tituloCtrl.text,
                       'descripcion': descripcionCtrl.text,
-                      'latitud': double.tryParse(latCtrl.text) ?? 0,
-                      'longitud': double.tryParse(lngCtrl.text) ?? 0,
-                      'provincia': provinciaCtrl.text,
-                      'ciudad': ciudadCtrl.text,
                     });
 
                 Navigator.pop(context); // spinner
@@ -1109,7 +1140,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Lugar actualizado exitosamente.'),
+                    content: Text('Tarea actualizado exitosamente.'),
                     backgroundColor: Color(0xFF16243e), // Azul institucional
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -1123,29 +1154,6 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
             },
           ),
         ],
-      ),
-    );
-  }
-
-  void _verResenas(String lugarId) async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-
-    final data = await Supabase.instance.client
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    final String rol = data['role'];
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ResenasPage(
-          lugarId: lugarId,
-          rolUsuario: rol, // 'publicador' o 'visitante'
-        ),
       ),
     );
   }
@@ -1246,21 +1254,14 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _styledField(nombreController, 'Nombre del Lugar'),
+                    _styledField(tituloController, 'Título de la tarea'),
                     const SizedBox(height: 12),
                     _styledField(
                       descripcionController,
-                      'Descripción',
-                      maxLines: 2,
+                      'Descripción de la tarea',
+                      maxLines: 3,
                     ),
                     const SizedBox(height: 12),
-                    _styledField(latController, 'Latitud', isNumber: true),
-                    const SizedBox(height: 12),
-                    _styledField(lngController, 'Longitud', isNumber: true),
-                    const SizedBox(height: 12),
-                    _styledField(provinciaController, 'Provincia'),
-                    const SizedBox(height: 12),
-                    _styledField(ciudadController, 'Ciudad'),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: () => _pickImages(setModalState),
@@ -1292,9 +1293,9 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => _guardarTurismo(context),
+                      onPressed: () => _guardarTarea(context),
                       icon: const Icon(Icons.save),
-                      label: const Text('Guardar Lugar'),
+                      label: const Text('Guardar Tarea'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF16243e),
                         foregroundColor: Colors.white,
@@ -1319,13 +1320,142 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
     });
   }
 
+  Future<void> _generarPDF(
+    String titulo,
+    String descripcion,
+    String autor,
+    List<String> fotos,
+  ) async {
+    final pdf = pw.Document();
+
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    final List<pw.ImageProvider> loadedImages = await Future.wait(
+      fotos.map((url) => networkImage(url)),
+    );
+
+    final now = DateTime.now();
+    final fecha = '${now.day}/${now.month}/${now.year}';
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(margin: const pw.EdgeInsets.all(32)),
+        build: (context) => [
+          pw.Center(
+            child: pw.Text(
+              'Reporte del Tarea Turístico',
+              style: pw.TextStyle(
+                font: boldFont,
+                fontSize: 22,
+                color: PdfColors.blue800,
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Divider(),
+
+          pw.Text(
+            'Fecha de generación: $fecha',
+            style: pw.TextStyle(
+              fontSize: 10,
+              font: font,
+              color: PdfColors.grey600,
+            ),
+          ),
+
+          pw.SizedBox(height: 16),
+
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.grey700),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _infoRow('Tarea:', titulo, font, boldFont),
+                _infoRow('Descripción:', descripcion, font, boldFont),
+                _infoRow('Autor:', autor, font, boldFont),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 20),
+
+          if (loadedImages.isNotEmpty) ...[
+            pw.Text(
+              'Fotografías',
+              style: pw.TextStyle(
+                font: boldFont,
+                fontSize: 18,
+                color: PdfColors.deepOrange800,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: loadedImages
+                  .map(
+                    (img) => pw.Container(
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey600),
+                        borderRadius: pw.BorderRadius.circular(6),
+                      ),
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Image(
+                        img,
+                        width: 162,
+                        height: 162,
+                        fit: pw.BoxFit.cover,
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  pw.Widget _infoRow(
+    String label,
+    String value,
+    pw.Font font,
+    pw.Font boldFont,
+  ) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: boldFont, fontSize: 12)),
+          pw.SizedBox(width: 6),
+          pw.Expanded(
+            child: pw.Text(
+              value,
+              style: pw.TextStyle(font: font, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Color.fromARGB(255, 22, 36, 62),
+        backgroundColor: const Color(0xFF1abc9c),
         foregroundColor: Colors.white,
-        title: const Text('Publicaciones propias'),
+        centerTitle: true,
+        title: const Text('Mis Tareas'),
         actions: [
           IconButton(
             tooltip: 'Cerrar sesión',
@@ -1341,222 +1471,258 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Tus publicaciones ',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      body: Stack(
+        children: [
+          // Fondo degradado tipo login
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFf39c12), Color(0xFFe74c3c)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-            
-                stream: FirebaseFirestore.instance
-                    .collection('turismo')
-                    .where("userID", isEqualTo: Supabase.instance.client.auth.currentUser?.id)
-                    //.orderBy('fecha', descending: true)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return Center(
-                      child: Column(
-                        children: [
-                        Text("${snapshot.hasData}"),
-                        
-                        CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFFF8AD25),
-                        ),
-                        ),
-                        ]
-                      )
-                    );
-                  }
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('tareas')
+                        .where(
+                          "userID",
+                          isEqualTo:
+                              Supabase.instance.client.auth.currentUser?.id,
+                        )
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFFF8AD25),
+                            ),
+                          ),
+                        );
+                      }
 
-                  final docs = snapshot.data!.docs;
+                      final docs = snapshot.data!.docs;
 
-                  if (docs.isEmpty) {
-                    return const Text(
-                      'Aún no hay lugares turísticos registrados.',
-                    );
-                  }
+                      if (docs.isEmpty) {
+                        return const Text(
+                          'Aún no hay tareas registradas.',
+                          style: TextStyle(color: Colors.white),
+                        );
+                      }
 
-                  final user = Supabase.instance.client.auth.currentUser;
+                      final user = Supabase.instance.client.auth.currentUser;
 
-                  return ListView.builder(
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final data = docs[index].data() as Map<String, dynamic>;
-                      final docId = docs[index].id;
+                      return ListView.builder(
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final data =
+                              docs[index].data() as Map<String, dynamic>;
+                          final docId = docs[index].id;
 
-                      final nombre = data['nombre'] ?? '';
-                      final descripcion = data['descripcion'] ?? '';
-                      final ciudad = data['ciudad'] ?? '';
-                      final provincia = data['provincia'] ?? '';
-                      final autor = data['autor'] ?? 'Desconocido';
-                      final userID =
-                          data['userID']; // Asegúrate de guardar esto en Firestore
-                      final latitud = data['latitud']?.toString() ?? '-';
-                      final longitud = data['longitud']?.toString() ?? '-';
-                      final fotos = List<String>.from(
-                        data['fotografias'] ?? [],
-                      );
+                          final titulo = data['titulo'] ?? '';
+                          final descripcion = data['descripcion'] ?? '';
+                          final autor = data['autor'] ?? 'Desconocido';
+                          final estado = data['estado'] ?? 'Pendiente';
+                          final userID = data['userID'];
+                          final fecha =
+                              data['fecha']?.toDate() ?? DateTime.now();
+                          final fotos = List<String>.from(
+                            data['fotografias'] ?? [],
+                          );
 
-                      final esCreador = userID == user?.id;
+                          final esCreador = userID == user?.id;
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 10),
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                nombre,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFE72F2B),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                descripcion,
-                                style: const TextStyle(fontSize: 15),
-                              ),
-                              const SizedBox(height: 8),
-                              _infoText("Provincia: ", provincia),
-                              _infoText("Ciudad: ", ciudad),
-                              _infoText(
-                                "Coordenadas: ",
-                                '$latitud°, $longitud°',
-                              ),
-                              _infoText("Publicado por: ", autor, italic: true),
-                              const SizedBox(height: 12),
+                          return Card(
+                            color: Colors.white,
+                            elevation: 10,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            margin: const EdgeInsets.symmetric(vertical: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    titulo,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFE72F2B),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    descripcion,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  _infoText("Publicado por: ", autor),
+                                  _infoText(
+                                    "Fecha de publicación",
+                                    "${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute}",
+                                  ),
+                                  _infoText("Estado", estado),
+                                  const SizedBox(height: 8),
 
-                              SizedBox(
-                                height:
-                                    (fotos.length / 3).ceil() *
-                                    110, // 3 por fila, 100 alto + 10 spacing
-                                child: GridView.count(
-                                  crossAxisCount: 3,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  children: fotos.map((url) {
-                                    return GestureDetector(
-                                      onTap: () =>
-                                          _mostrarModalImagen(url, docId, esCreador),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          url,
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return Container(
-                                                  color: Colors.grey[300],
-                                                  child: const Icon(
-                                                    Icons.broken_image,
-                                                    color: Colors.red,
-                                                  ),
-                                                );
-                                              },
+                                  // Galería de imágenes
+                                  SizedBox(
+                                    height: (fotos.length / 3).ceil() * 110,
+                                    child: GridView.count(
+                                      crossAxisCount: 3,
+                                      crossAxisSpacing: 8,
+                                      mainAxisSpacing: 8,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      children: fotos.map((url) {
+                                        return GestureDetector(
+                                          onTap: () => _mostrarModalImagen(
+                                            url,
+                                            docId,
+                                            esCreador,
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: Image.network(
+                                              url,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: Colors.grey[300],
+                                                      child: const Icon(
+                                                        Icons.broken_image,
+                                                        color: Colors.red,
+                                                      ),
+                                                    );
+                                                  },
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  if (esCreador && fotos.length < 6)
+                                    TextButton.icon(
+                                      onPressed: () => _agregarMasImagenes(
+                                        docId,
+                                        fotos.length,
+                                      ),
+                                      icon: const Icon(Icons.add_a_photo),
+                                      label: const Text('Agregar imagen'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: const Color(
+                                          0xFF16243e,
                                         ),
                                       ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-
-                              const SizedBox(height: 8),
-
-                              if (esCreador && fotos.length < 6)
-                                TextButton.icon(
-                                  onPressed: () =>
-                                      _agregarMasImagenes(docId, fotos.length),
-                                  icon: const Icon(Icons.add_a_photo),
-                                  label: const Text('Agregar imagen'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: const Color(0xFF16243e),
-                                  ),
-                                ),
-
-                              if (esCreador) const Divider(height: 24),
-
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  if (esCreador)
-                                    IconButton(
-                                      onPressed: () =>
-                                          _editarLugar(docId, data),
-                                      icon: const Icon(Icons.edit),
-                                      tooltip: 'Editar',
-                                      color: Colors.white,
-                                      style: ButtonStyle(
-                                        backgroundColor:
-                                            WidgetStateProperty.all(
-                                              Color(0xFF16243e),
-                                            ),
-                                      ),
                                     ),
-                                  if (esCreador)
-                                    IconButton(
-                                      onPressed: () =>
-                                          _confirmarEliminarLugar(docId),
-                                      icon: const Icon(Icons.delete),
-                                      tooltip: 'Eliminar',
-                                      color: Colors.white,
-                                      style: ButtonStyle(
-                                        backgroundColor:
-                                            WidgetStateProperty.all(
-                                              Color(0xFFE72F2B),
-                                            ),
+
+                                  if (esCreador) const Divider(height: 24),
+
+                                  // Botones de acción
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      if (esCreador && estado != 'Completada')
+                                        IconButton(
+                                          onPressed: () =>
+                                              _editarTarea(docId, data),
+                                          icon: const Icon(Icons.edit),
+                                          tooltip: 'Editar',
+                                          color: Colors.white,
+                                          style: ButtonStyle(
+                                            backgroundColor:
+                                                WidgetStateProperty.all(
+                                                  Color(0xFF16243e),
+                                                ),
+                                          ),
+                                        ),
+                                      if (esCreador && estado != 'Completada')
+                                        IconButton(
+                                          onPressed: () =>
+                                              _confirmarEliminarTarea(docId),
+                                          icon: const Icon(Icons.delete),
+                                          tooltip: 'Eliminar',
+                                          color: Colors.white,
+                                          style: ButtonStyle(
+                                            backgroundColor:
+                                                WidgetStateProperty.all(
+                                                  Color(0xFFE72F2B),
+                                                ),
+                                          ),
+                                        ),
+                                      IconButton(
+                                        onPressed: () => _generarPDF(
+                                          titulo,
+                                          descripcion,
+                                          autor,
+                                          fotos,
+                                        ),
+                                        icon: const Icon(Icons.picture_as_pdf),
+                                        tooltip: 'Exportar a PDF',
+                                        color: Colors.white,
+                                        style: ButtonStyle(
+                                          backgroundColor:
+                                              WidgetStateProperty.all(
+                                                Color(0xFFF8AD25),
+                                              ),
+                                        ),
                                       ),
-                                    ),
-                                  IconButton(
-                                    onPressed: () => _verResenas(docId),
-                                    icon: const Icon(Icons.reviews),
-                                    tooltip: 'Ver reseñas',
-                                    color: Colors.white,
-                                    style: ButtonStyle(
-                                      backgroundColor: WidgetStateProperty.all(
-                                        Color(0xFF16243e),
-                                      ),
-                                    ),
+                                      if (estado == 'Pendiente')
+                                        IconButton(
+                                          onPressed: () =>
+                                              _confirmarCompletarTarea(docId),
+                                          icon: const Icon(
+                                            Icons.check_circle_outline,
+                                          ),
+                                          tooltip: 'Completar tarea',
+                                          color: Colors.white,
+                                          style: ButtonStyle(
+                                            backgroundColor:
+                                                WidgetStateProperty.all(
+                                                  Color(0xFF1abc9c),
+                                                ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
 
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF16243e),
-        foregroundColor: Colors.white, // Ícono blanco
-        tooltip: 'Añadir lugar turístico',
+        backgroundColor: const Color(0xFF1abc9c),
+        foregroundColor: Colors.white,
+        tooltip: 'Añadir una tarea',
         onPressed: () => _mostrarFormularioModal(context),
-        child: const Icon(Icons.add_location_alt),
+        child: const Icon(Icons.add, size: 30),
       ),
     );
   }

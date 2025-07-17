@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mi_supabase_flutter/tabs/publicador_tabs.dart';
-import 'package:mi_supabase_flutter/tabs/visitante_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup_page.dart';
 
@@ -43,10 +42,10 @@ class _LoginPageState extends State<LoginPage> {
     try {
       // Consulta si el usuario está marcado como eliminado
       final estadoUsuario = await supabase
-          .from("users")
+          .from("usuarios")
           .select('deleted')
           .eq('email', email)
-          .maybeSingle(); // Evita error si no hay resultados
+          .maybeSingle();
 
       // Si no existe el correo en la base
       if (estadoUsuario == null) {
@@ -72,44 +71,29 @@ class _LoginPageState extends State<LoginPage> {
 
       final user = response.user;
 
-      if (user != null) {
-        // Consulta el rol del usuario autenticado
-        final data = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle(); // También puede no existir
-
-        if (data == null || data['role'] == null) {
-          _showSnackBar('No se encontró el rol del usuario.', error: true);
-          setState(() => _cargando = false);
-          return;
-        }
-
-        final String role = data['role'];
-
-        if (!mounted) return;
-
-        // Redirección según el rol obtenido
-        if (role == 'publicador') {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const PublicadorTabs()),
-            (route) => false,
-          );
-        } else if (role == 'visitante') {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const VisitanteTabs()),
-            (route) => false,
-          );
-        } else {
-          _showSnackBar('Rol desconocido: $role', error: true);
-          setState(() => _cargando = false);
-        }
-      } else {
+      if (user == null) {
         _showSnackBar('Correo o contraseña inválidos.', error: true);
         setState(() => _cargando = false);
+        return;
+      } else {
+        final nombreCompleto = await supabase
+            .from('usuarios')
+            .select('name, lastName')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (nombreCompleto != null) {
+          final nombre = nombreCompleto['name'] ?? '';
+          final apellido = nombreCompleto['lastName'] ?? '';
+          _showSnackBar('Bienvenido $nombre $apellido', error: false);
+        } else {
+          _showSnackBar('Inicio de sesión exitoso.', error: false);
+        }
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const PublicadorTabs()),
+          (route) => false,
+        );
       }
     } catch (e) {
       _showSnackBar('Correo o contraseña inválidos.', error: true);
@@ -151,13 +135,16 @@ class _LoginPageState extends State<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Icon(
-                        Icons.landscape,
+                        Icons
+                            .check_circle_outline,
                         size: 80,
-                        color: Color(0xFFe74c3c),
+                        color: Color(
+                          0xFF1abc9c,
+                        ), // Verde turquesa, coherente con tu diseño
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Explora tu aventura',
+                        'To-Do Organiza tu día',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 22,
@@ -291,7 +278,7 @@ class _LoginPageState extends State<LoginPage> {
                           : ElevatedButton.icon(
                               onPressed: login,
                               icon: const Icon(Icons.flight_takeoff),
-                              label: const Text('Iniciar aventura'),
+                              label: const Text('Iniciar Rutina'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF1abc9c),
                                 foregroundColor: Colors.white,

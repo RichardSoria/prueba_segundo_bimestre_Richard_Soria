@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mi_supabase_flutter/publisher_page.dart';
-import 'package:mi_supabase_flutter/publisher_profile_page.dart';
 import 'package:mi_supabase_flutter/publisher_publications_page.dart';
 
 
@@ -17,7 +16,6 @@ class _PublicadorTabsState extends State<PublicadorTabs> {
   final List<Widget> _pages = [
     TurismosPage(),
     PublisherPublicationsPage(),
-    PublisherProfilePage()
   ];
 
   void _onItemTapped(int index) {
@@ -38,9 +36,8 @@ class _PublicadorTabsState extends State<PublicadorTabs> {
         selectedItemColor: Color.fromARGB(255, 22, 36, 62),
 
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Publicaciones'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil')
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Tareas'),
+          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Mis Tareas'),
         ],
       ),
     );

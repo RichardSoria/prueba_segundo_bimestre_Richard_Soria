@@ -54,16 +54,17 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() => _cargando = true);
 
     try {
-      final ususarioRegistrado = await supabase.from("users")
-      .select("deleted")
-      .eq("email", emailController.text)
-      .maybeSingle();
+      final ususarioRegistrado = await supabase
+          .from("usuarios")
+          .select("deleted")
+          .eq("email", emailController.text)
+          .maybeSingle();
 
-      if (ususarioRegistrado?['deleted'] == true)
-      {
+      if (ususarioRegistrado?['deleted'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: 
-          Text("Esta cuenta no se puede volver a registrar"))
+          const SnackBar(
+            content: Text("Esta cuenta no se puede volver a registrar"),
+          ),
         );
 
         setState(() {
@@ -79,8 +80,6 @@ class _SignUpPageState extends State<SignUpPage> {
         return;
       }
 
-     
-      
       final response = await supabase.auth.signUp(
         email: emailController.text,
         password: passwordController.text,
@@ -89,16 +88,14 @@ class _SignUpPageState extends State<SignUpPage> {
 
       final user = response.user;
 
-
-
       if (user != null) {
-        await supabase.from('users').insert({
+        await supabase.from('usuarios').insert({
           'id': user.id,
           'email': user.email,
           'role': selectedRole,
           'name': nameController.text,
           'lastName': lastNameController.text,
-          'deleted': false
+          'deleted': false,
         });
 
         _showSnackBar('Revisa tu correo para confirmar tu cuenta.');
@@ -126,142 +123,185 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
+  // Método para decorar los inputs de forma consistente
+  InputDecoration inputDecoration(
+    String label,
+    IconData icon, {
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      floatingLabelStyle: const TextStyle(color: Color(0xFF1abc9c)),
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1abc9c)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1abc9c), width: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text('Registrarse - El Búho', style: TextStyle(color: Colors.white),),
-        centerTitle: true,
-        backgroundColor: Color.fromARGB(255, 22, 36, 62),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 6,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(
-                    Icons.person_add,
-                    size: 80,
-                    color: Color.fromARGB(255, 225, 31, 28),
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Correo electrónico',
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextField(
-                    controller: passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Contraseña',
-                      prefixIcon: const Icon(Icons.lock),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedRole,
-                    decoration: const InputDecoration(
-                      labelText: 'Rol de usuario',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: roles.map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(
-                          value[0].toUpperCase() + value.substring(1),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() => selectedRole = value);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre',
-                      prefixIcon: Icon(Icons.person),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextField(
-                    controller: lastNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Apellido',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  _cargando
-                      ? const Center(child: CircularProgressIndicator())
-                      : ElevatedButton.icon(
-                          onPressed: signup,
-                          icon: const Icon(Icons.app_registration),
-                          label: const Text('Registrarse'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color.fromARGB(255, 225, 31, 28),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                  const SizedBox(height: 12),
-
-                  const Text(
-                    '¿Ya tienes una cuenta?',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                      );
-                    },
-                    child: const Text('Iniciar sesión', style: TextStyle(color: Color.fromARGB(255, 225, 31, 28)),),
-                  ),
+      // Fondo degradado turístico (igual que login)
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFFF39C12), // Amarillo
+                  Color(0xFFE74C3C), // Rojo
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
-        ),
+
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                elevation: 10,
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Ícono decorativo de registro
+                      const Icon(
+                        Icons.person_add,
+                        size: 80,
+                        color: Color(0xFFE11F1C),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Campo: Correo
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        cursorColor: Color(0xFF1abc9c),
+                        decoration: inputDecoration(
+                          'Correo electrónico',
+                          Icons.email,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Campo: Contraseña
+                      TextField(
+                        controller: passwordController,
+                        obscureText: _obscurePassword,
+                        cursorColor: Color(0xFF1abc9c),
+                        decoration: inputDecoration(
+                          'Contraseña',
+                          Icons.lock,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              color: Colors.grey,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Campo: Nombre
+                      TextField(
+                        controller: nameController,
+                        cursorColor: Color(0xFF1abc9c),
+                        decoration: inputDecoration('Nombre', Icons.person),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Campo: Apellido
+                      TextField(
+                        controller: lastNameController,
+                        cursorColor: Color(0xFF1abc9c),
+                        decoration: inputDecoration(
+                          'Apellido',
+                          Icons.person_outline,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Botón con spinner verde si está cargando
+                      _cargando
+                          ? const Center(
+                              child: SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF2ecc71),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: signup,
+                              icon: const Icon(Icons.app_registration),
+                              label: const Text('Registrarse'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1abc9c),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 12),
+
+                      const Text(
+                        '¿Ya tienes una cuenta?',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Enlace para ir a login
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Iniciar sesión',
+                          style: TextStyle(color: Color(0xFFE11F1C)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
