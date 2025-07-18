@@ -345,7 +345,7 @@ class _TurismosPageState extends State<TurismosPage> {
         'titulo': tituloController.text,
         'descripcion': descripcionController.text,
         'fotografias': urls,
-        'estado': 'pendiente',
+        'estado': 'Pendiente',
         'fecha': Timestamp.now(),
       });
 
