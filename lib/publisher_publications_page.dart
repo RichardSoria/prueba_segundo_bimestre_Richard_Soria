@@ -345,7 +345,7 @@ class _PublisherPublicationsPageState extends State<PublisherPublicationsPage> {
         'titulo': tituloController.text,
         'descripcion': descripcionController.text,
         'fotografias': urls,
-        'estado': 'pendiente',
+        'estado': 'Pendiente',
         'fecha': Timestamp.now(),
       });
 
